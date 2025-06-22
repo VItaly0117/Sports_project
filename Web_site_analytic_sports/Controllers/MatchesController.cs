@@ -14,32 +14,34 @@ namespace Web_site_analytic_sports.Controllers
             _context = context;
         }
 
-        public async Task<IActionResult> Index(int year = 1998, string stage = "Group")
+        public async Task<IActionResult> Index(int year = 1998)
         {
             var tournament = await _context.Tournaments
-                .Include(t => t.Matches)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.Year == year);
 
             if (tournament == null)
                 return NotFound();
 
-            var matches = tournament.Matches
-                .Where(m => m.Stage == stage)
+            var matches = await _context.FootballMatches
+                .Include(m => m.Tournament)
+                .Where(m => m.TournamentId == tournament.Id)
                 .OrderBy(m => m.Date)
-                .ToList();
+                .ToListAsync();
 
             ViewBag.Tournament = tournament;
-            ViewBag.Stage = stage;
-            ViewBag.Years = await _context.Tournaments.Select(t => t.Year).Distinct().ToListAsync();
+            ViewBag.Years = await _context.Tournaments
+                .Select(t => t.Year)
+                .Distinct()
+                .ToListAsync();
 
             return View(matches);
         }
 
         public async Task<IActionResult> Details(int id)
         {
-            // Используйте Match вместо matchObj
-            var match = await _context.Matches
-                .Include(m => m.Tournament) // Теперь будет работать
+            var match = await _context.FootballMatches
+                .Include(m => m.Tournament)
                 .FirstOrDefaultAsync(m => m.Id == id);
 
             if (match == null)

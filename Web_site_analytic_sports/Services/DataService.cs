@@ -1,14 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using System.Linq;
+﻿using System.Globalization;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Web_site_analytic_sports.Data;
 using Web_site_analytic_sports.Models;
-
 
 namespace Web_site_analytic_sports.Services
 {
@@ -21,10 +15,6 @@ namespace Web_site_analytic_sports.Services
         {
             _context = context;
             _env = env;
-        }
-        public interface IDataService
-        {
-            Task SeedWorldCupDataAsync(int year);
         }
 
         public async Task SeedWorldCupDataAsync(int year)
@@ -42,15 +32,39 @@ namespace Web_site_analytic_sports.Services
             _context.Tournaments.Add(tournament);
             await _context.SaveChangesAsync();
 
-            string dataPath = Path.Combine(_env.ContentRootPath, "Data", "worldcup", $"{year}--{tournament.Country.ToLower()}");
+            string folderName = GetHostFolderName(year);
+            string dataPath = Path.Combine(_env.WebRootPath, "data", "worldcup", $"{year}--{folderName}");
 
             if (!Directory.Exists(dataPath))
                 return;
 
-            await ParseGroupMatches(dataPath, tournament.Id);
+            await ParseGroupMatches(dataPath, tournament.Id, year);
         }
 
-        private async Task ParseGroupMatches(string dataPath, int tournamentId)
+        private string GetHostFolderName(int year)
+        {
+            return year switch
+            {
+                1930 => "uruguay",
+                1934 => "italy",
+                1938 => "france",
+                1950 => "brazil",
+                1954 => "switzerland",
+                1958 => "sweden",
+                1962 => "chile",
+                1966 => "england",
+                1998 => "france",
+                2002 => "south-korea-japan",
+                2006 => "germany",
+                2010 => "south-africa",
+                2014 => "brazil",
+                2018 => "russia",
+                2022 => "qatar",
+                _ => "unknown"
+            };
+        }
+
+        private async Task ParseGroupMatches(string dataPath, int tournamentId, int year)
         {
             string groupFile = Path.Combine(dataPath, "group.md");
 
@@ -70,40 +84,42 @@ namespace Web_site_analytic_sports.Services
                     continue;
                 }
 
-                var MatchMode = ParseMatchLine(line);
-                if (MatchMode != null)
+                var matchObj = ParseMatchLine(line, year);
+
+                if (matchObj != null)
                 {
-                    MatchMode.Group = currentGroup;
-                    MatchMode.TournamentId = tournamentId;
-                    _context.Matches.Add(MatchMode);
+                    matchObj.Group = currentGroup;
+                    matchObj.TournamentId = tournamentId;
+                    matchObj.Stage = "Group";
+                    _context.FootballMatches.Add(matchObj);
                 }
             }
 
             await _context.SaveChangesAsync();
         }
 
-        private MatchMode? ParseMatchLine(string line)
+        private FootballMatch? ParseMatchLine(string line, int year)
         {
             var regex = new Regex(@"\((\d+)\)\s+(\d+)\s+(\w+)\s+([\w\s]+?)\s+(\d+)-(\d+)\s+([\w\s]+?)\s+@\s+([\w\s,]+)");
-            var match = regex.Match(line);
+            var regexMatch = regex.Match(line);
 
-            if (!match.Success)
+            if (!regexMatch.Success)
                 return null;
 
             try
             {
-                int day = int.Parse(match.Groups[2].Value);
-                string monthName = match.Groups[3].Value;
-                string team1 = match.Groups[4].Value.Trim();
-                int score1 = int.Parse(match.Groups[5].Value);
-                int score2 = int.Parse(match.Groups[6].Value);
-                string team2 = match.Groups[7].Value.Trim();
-                string location = match.Groups[8].Value.Trim();
+                int day = int.Parse(regexMatch.Groups[2].Value);
+                string monthName = regexMatch.Groups[3].Value;
+                string team1 = regexMatch.Groups[4].Value.Trim();
+                int score1 = int.Parse(regexMatch.Groups[5].Value);
+                int score2 = int.Parse(regexMatch.Groups[6].Value);
+                string team2 = regexMatch.Groups[7].Value.Trim();
+                string location = regexMatch.Groups[8].Value.Trim();
 
                 int month = DateTime.ParseExact(monthName, "MMMM", CultureInfo.InvariantCulture).Month;
-                var date = new DateTime(1998, month, day);
+                var date = new DateTime(year, month, day);
 
-                return new MatchMode
+                return new FootballMatch
                 {
                     Date = date,
                     Team1 = team1,
